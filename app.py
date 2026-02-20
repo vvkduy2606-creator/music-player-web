@@ -66,7 +66,7 @@ def logout():
 def get_songs():
     return jsonify(songs_db)
 
-# Upload nhạc (chỉ admin)
+# Upload nhạc (chỉ admin) - Tối ưu tốc độ
 @app.route('/api/upload', methods=['POST'])
 def upload_song():
     token = request.headers.get('Authorization')
@@ -78,28 +78,33 @@ def upload_song():
         return jsonify({'success': False, 'message': 'Không có file'}), 400
     
     file = request.files['file']
-    title = request.form.get('title', file.filename)
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'File trống'}), 400
     
-    if file:
-        # Tạo tên file unique
-        ext = os.path.splitext(file.filename)[1]
-        filename = str(uuid.uuid4()) + ext
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        
-        # Thêm vào database
-        song = {
-            'id': str(uuid.uuid4()),
-            'title': title,
-            'filename': filename,
-            'url': f'/api/stream/{filename}',
-            'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M')
-        }
-        songs_db.append(song)
-        
-        return jsonify({'success': True, 'song': song})
+    # Lấy đuôi file và tạo tên ngắn hơn để xử lý nhanh hơn
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.aac']:
+        return jsonify({'success': False, 'message': 'Định dạng không được hỗ trợ'}), 400
     
-    return jsonify({'success': False, 'message': 'Upload thất bại'}), 400
+    filename = str(uuid.uuid4())[:8] + ext
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    
+    # Lưu file ngay lập tức
+    file.save(filepath)
+    
+    title = request.form.get('title', file.filename.replace(ext, ''))
+    
+    # Thêm vào database
+    song = {
+        'id': str(uuid.uuid4()),
+        'title': title,
+        'filename': filename,
+        'url': f'/api/stream/{filename}',
+        'uploaded_at': datetime.now().strftime('%Y-%m-%d %H:%M')
+    }
+    songs_db.append(song)
+    
+    return jsonify({'success': True, 'song': song})
 
 # Phát nhạc (ai cũng nghe được)
 @app.route('/api/stream/<filename>')
